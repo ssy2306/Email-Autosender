@@ -276,30 +276,30 @@ console.log("cuttof: ",cutoffDate.getDate(),"format: " ,formattedDate,"times: ",
     }
 
 
-    async function getLabelIdByName(labelName) {
-      const response = await gapi.client.gmail.users.labels.list({
-        userId: 'me',
-      });
-      const labels = response.result.labels;
-      for (const label of labels) {
-        if (label.name === labelName) {
-          return label.id;
-        }
-      }
-      // Label not found, create a new label
-      const createdLabel = await createLabel(labelName);
-      return createdLabel.id;
-    }
+    // async function getLabelIdByName(labelName) {
+    //   const response = await gapi.client.gmail.users.labels.list({
+    //     userId: 'me',
+    //   });
+    //   const labels = response.result.labels;
+    //   for (const label of labels) {
+    //     if (label.name === labelName) {
+    //       return label.id;
+    //     }
+    //   }
+    //   // Label not found, create a new label
+    //   const createdLabel = await createLabel(labelName);
+    //   return createdLabel.id;
+    // }
 
-    async function createLabel(labelName) {
-      const response = await gapi.client.gmail.users.labels.create({
-        userId: 'me',
-        resource: {
-          name: labelName,
-        },
-      });
-      return response.result;
-    }
+    // async function createLabel(labelName) {
+    //   const response = await gapi.client.gmail.users.labels.create({
+    //     userId: 'me',
+    //     resource: {
+    //       name: labelName,
+    //     },
+    //   });
+    //   return response.result;
+    // }
 
 
 
