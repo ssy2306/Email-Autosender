@@ -154,14 +154,15 @@
      */
     async function listUnreadEmails() {
       const cutoffDate = new Date('2023-07-08T09:00:00Z'); // Specify the cutoff date and time
-      const cutoffTimestamp = cutoffDate.getTime();
+      // const cutoffTimestamp = cutoffDate.getTime();
 
       let response;
       try {
         response = await gapi.client.gmail.users.messages.list({
           userId: 'me',
           q: 'is:unread',
-          messages: true // Filter for unread emails only
+          messages: true,
+          maxResults: 5// Filter for unread emails only
         });
       } catch (err) {
         document.getElementById('content').innerText = err.message;
@@ -171,6 +172,7 @@
       const emails = response.result.messages;
       console.log(emails);
       const threadsToReply = [];
+
       for (const email of emails) {
         const threadId = email.threadId;
         console.log(threadId);
@@ -178,51 +180,67 @@
           const threadResponse = await gapi.client.gmail.users.threads.get({
             userId: 'me',
             id: threadId,
-            format: 'full'
+            format: 'full',
           });
           console.log(threadResponse);
-          const timestamp = parseInt(threadResponse.messages[0].payload.headers[1].date);
-          console.log(timestamp);
-          
-      const dateString = "Sat, 08 Jul 2023 00:43:13 -0700 (PDT)";
-      const dateParts = dateString.split(", ")[1].split(" ");
-      const monthNames = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-      ];
-      const month = monthNames.indexOf(dateParts[1]) + 1;
-      const day = dateParts[0];
-      const year = dateParts[2];
-      const time = dateParts[3];
-      const formattedDate = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}T${time}Z`;
+          function splitString(internalDate) {
+            const delimiter = ";        ";
+            const index = internalDate.indexOf(delimiter);
 
-      console.log(formattedDate);
+            if (index !== -1) {
+              const splitPart = internalDate.substring(0, index + delimiter.length);
+              const remainingPart = internalDate.substring(index + delimiter.length);
+              return [splitPart, remainingPart];
+            } else {
+              // If the delimiter is not found, return the entire string as splitPart and an empty string as remainingPart
+              return [internalDate, ''];
+            }
+          }
 
-      console.log(timestamp);
+          const internalDate = threadResponse.result.messages[0].payload.headers[1].value;
+          console.log(internalDate);
 
-          if (formattedDate > cutoffTimestamp) {
-            threadsToReply.push(threadId);
+          const [splitPart, remainingPart] = splitString(internalDate);
+
+
+          const dateString = remainingPart;
+          const dateParts = dateString.split(", ")[1].split(" ");
+          const monthNames = [
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+          ];
+          const month = monthNames.indexOf(dateParts[1]) + 1;
+          const day = dateParts[0];
+          const year = dateParts[2];
+          const time = dateParts[3];
+          const formattedDate = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}T${time}Z`;
+
+          const timestamp = new Date(formattedDate);
+console.log("cuttof: ",cutoffDate.getDate(),"format: " ,formattedDate,"times: ", timestamp);
+
+          if (timestamp.getDate() >= cutoffDate.getDate()) {          
+            threadsToReply.push(email.threadId);
+            console.log(threadsToReply);
           }
         } catch (err) {
           console.error('Error retrieving thread:', err);
         }
+        for (const threadId of threadsToReply) {
+        await addLabelToThread(threadId, "bot_unsent");
       }
+      }
+      
 
-    for (const threadId of threadsToReply) {
-      await addLabelToThread(threadId, 'bot-unsent');
-    }
-
-
-    if (!emails || emails.length === 0) {
-      document.getElementById('content').innerText = 'No unread emails found.';
-      return;
-    }
-    // Display the list of unread emails
-    let output = 'Unread Emails:\n';
-    emails.forEach((email) => {
-      output += `- ${email.id}\n`;
-    });
-    document.getElementById('content').innerText = output;
+      if (!emails || emails.length === 0) {
+        document.getElementById('content').innerText = 'No unread emails found.';
+        return;
+      }
+      // Display the list of unread emails
+      let output = 'Unread Emails:\n';
+      emails.forEach((email) => {
+        output += `- ${email.id}\n`;
+      });
+      document.getElementById('content').innerText = output;
     }
 
 
@@ -251,10 +269,12 @@
       const response = await gapi.client.gmail.users.threads.modify({
         userId: 'me',
         id: threadId,
-        addLabelIds: [getLabelIdByName(labelName)],
+        addLabelIds: [ "Label_2" ]  // Optional: If you want to remove any label, specify their IDs here
       });
+      console.log(response);
       return response.result;
     }
+
 
     async function getLabelIdByName(labelName) {
       const response = await gapi.client.gmail.users.labels.list({
