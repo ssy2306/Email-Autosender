@@ -1,148 +1,292 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>Gmail API Quickstart</title>
-    <meta charset="utf-8" />
-  </head>
-  <body>
-    <p>Gmail API Quickstart</p>
 
-    <!--Add buttons to initiate auth sequence and sign out-->
-    <button id="authorize_button" onclick="handleAuthClick()">Authorize</button>
-    <button id="signout_button" onclick="handleSignoutClick()">Sign Out</button>
+<head>
+  <title>Gmail API Quickstart</title>
+  <meta charset="utf-8" />
+</head>
 
-    <pre id="content" style="white-space: pre-wrap;"></pre>
+<body>
+  <p>Gmail API Quickstart</p>
 
-    <script type="text/javascript">
-      /* exported gapiLoaded */
-      /* exported gisLoaded */
-      /* exported handleAuthClick */
-      /* exported handleSignoutClick */ 
+  <!--Add buttons to initiate auth sequence and sign out-->
+  <button id="authorize_button" onclick="handleAuthClick()">Authorize</button>
+  <button id="signout_button" onclick="handleSignoutClick()">Sign Out</button>
+  <button id="unread_button" onclick="listUnreadEmails()">Get Unread Emails</button>
 
-      // TODO(developer): Set to client ID and API key from the Developer Console
-      const CLIENT_ID = '702488149820-edssk51v21ts3k602gmb7sg6khjsvmr1';
-      const API_KEY = 'AIzaSyCeLo-bn4uaGPA2ElFnBq4IRoPdzbWQSVQ';
+  <pre id="content" style="white-space: pre-wrap;"></pre>
 
-      // Discovery doc URL for APIs used by the quickstart
-      const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest';
+  <script type="text/javascript">
+    /* exported gapiLoaded */
+    /* exported gisLoaded */
+    /* exported handleAuthClick */
+    /* exported handleSignoutClick */
 
-      // Authorization scopes required by the API; multiple scopes can be
-      // included, separated by spaces.
-      const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly';
+    // TODO(developer): Set to client ID and API key from the Developer Console
+    const CLIENT_ID = '702488149820-edssk51v21ts3k602gmb7sg6khjsvmr1';
+    const API_KEY = 'AIzaSyCeLo-bn4uaGPA2ElFnBq4IRoPdzbWQSVQ';
 
-      let tokenClient;
-      let gapiInited = false;
-      let gisInited = false;
+    // Discovery doc URL for APIs used by the quickstart
+    const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest';
 
-      document.getElementById('authorize_button').style.visibility = 'hidden';
-      document.getElementById('signout_button').style.visibility = 'hidden';
+    // Authorization scopes required by the API; multiple scopes can be
+    // included, separated by spaces.
+    const SCOPES = 'https://www.googleapis.com/auth/gmail.modify';
 
-      /**
-       * Callback after api.js is loaded.
-       */
-      function gapiLoaded() {
-        gapi.load('client', initializeGapiClient);
+    let tokenClient;
+    let gapiInited = false;
+    let gisInited = false;
+
+    document.getElementById('authorize_button').style.visibility = 'hidden';
+    document.getElementById('signout_button').style.visibility = 'hidden';
+    document.getElementById('unread_button').style.visibility = 'hidden';
+
+    /**
+     * Callback after api.js is loaded.
+     */
+    function gapiLoaded() {
+      gapi.load('client', initializeGapiClient);
+    }
+
+    /**
+     * Callback after the API client is loaded. Loads the
+     * discovery doc to initialize the API.
+     */
+    async function initializeGapiClient() {
+      await gapi.client.init({
+        apiKey: API_KEY,
+        discoveryDocs: [DISCOVERY_DOC],
+      });
+      gapiInited = true;
+      maybeEnableButtons();
+    }
+
+    /**
+     * Callback after Google Identity Services are loaded.
+     */
+    function gisLoaded() {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: '', // defined later
+      });
+      gisInited = true;
+      maybeEnableButtons();
+    }
+
+    /**
+     * Enables user interaction after all libraries are loaded.
+     */
+    function maybeEnableButtons() {
+      if (gapiInited && gisInited) {
+        document.getElementById('authorize_button').style.visibility = 'visible';
       }
+    }
 
-      /**
-       * Callback after the API client is loaded. Loads the
-       * discovery doc to initialize the API.
-       */
-      async function initializeGapiClient() {
-        await gapi.client.init({
-          apiKey: API_KEY,
-          discoveryDocs: [DISCOVERY_DOC],
+    /**
+     *  Sign in the user upon button click.
+     */
+    function handleAuthClick() {
+      tokenClient.callback = async (resp) => {
+        if (resp.error !== undefined) {
+          throw (resp);
+        }
+        document.getElementById('signout_button').style.visibility = 'visible';
+        document.getElementById('authorize_button').innerText = 'Refresh';
+        document.getElementById('unread_button').style.visibility = 'visible';
+        await listLabels();
+      };
+
+      if (gapi.client.getToken() === null) {
+        // Prompt the user to select a Google Account and ask for consent to share their data
+        // when establishing a new session.
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+      } else {
+        // Skip display of account chooser and consent dialog for an existing session.
+        tokenClient.requestAccessToken({ prompt: '' });
+      }
+    }
+
+    /**
+     *  Sign out the user upon button click.
+     */
+    function handleSignoutClick() {
+      const token = gapi.client.getToken();
+      if (token !== null) {
+        google.accounts.oauth2.revoke(token.access_token);
+        gapi.client.setToken('');
+        document.getElementById('content').innerText = '';
+        document.getElementById('authorize_button').innerText = 'Authorize';
+        document.getElementById('signout_button').style.visibility = 'hidden';
+        document.getElementById('unread_button').style.visibility = 'hidden';
+      }
+    }
+
+    /**
+     * Print all Labels in the authorized user's inbox. If no labels
+     * are found an appropriate message is printed.
+     */
+    async function listLabels() {
+      let response;
+      try {
+        response = await gapi.client.gmail.users.labels.list({
+          'userId': 'me',
         });
-        gapiInited = true;
-        maybeEnableButtons();
+      } catch (err) {
+        document.getElementById('content').innerText = err.message;
+        return;
       }
+      const labels = response.result.labels;
+      if (!labels || labels.length == 0) {
+        document.getElementById('content').innerText = 'No labels found.';
+        return;
+      }
+      // Flatten to string to display
+      const output = labels.reduce(
+        (str, label) => `${str}${label.name}\n`,
+        'Labels:\n');
+      document.getElementById('content').innerText = output;
+    }
 
-      /**
-       * Callback after Google Identity Services are loaded.
-       */
-      function gisLoaded() {
-        tokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: CLIENT_ID,
-          scope: SCOPES,
-          callback: '', // defined later
+    /**
+     * Print all unread emails in the authorized user's inbox. If no unread emails
+     * are found, an appropriate message is printed.
+     */
+    async function listUnreadEmails() {
+      const cutoffDate = new Date('2023-07-08T09:00:00Z'); // Specify the cutoff date and time
+      const cutoffTimestamp = cutoffDate.getTime();
+
+      let response;
+      try {
+        response = await gapi.client.gmail.users.messages.list({
+          userId: 'me',
+          q: 'is:unread',
+          messages: true // Filter for unread emails only
         });
-        gisInited = true;
-        maybeEnableButtons();
+      } catch (err) {
+        document.getElementById('content').innerText = err.message;
+        return;
       }
 
-      /**
-       * Enables user interaction after all libraries are loaded.
-       */
-      function maybeEnableButtons() {
-        if (gapiInited && gisInited) {
-          document.getElementById('authorize_button').style.visibility = 'visible';
-        }
-      }
-
-      /**
-       *  Sign in the user upon button click.
-       */
-      function handleAuthClick() {
-        tokenClient.callback = async (resp) => {
-          if (resp.error !== undefined) {
-            throw (resp);
-          }
-          document.getElementById('signout_button').style.visibility = 'visible';
-          document.getElementById('authorize_button').innerText = 'Refresh';
-          await listLabels();
-        };
-
-        if (gapi.client.getToken() === null) {
-          // Prompt the user to select a Google Account and ask for consent to share their data
-          // when establishing a new session.
-          tokenClient.requestAccessToken({prompt: 'consent'});
-        } else {
-          // Skip display of account chooser and consent dialog for an existing session.
-          tokenClient.requestAccessToken({prompt: ''});
-        }
-      }
-
-      /**
-       *  Sign out the user upon button click.
-       */
-      function handleSignoutClick() {
-        const token = gapi.client.getToken();
-        if (token !== null) {
-          google.accounts.oauth2.revoke(token.access_token);
-          gapi.client.setToken('');
-          document.getElementById('content').innerText = '';
-          document.getElementById('authorize_button').innerText = 'Authorize';
-          document.getElementById('signout_button').style.visibility = 'hidden';
-        }
-      }
-
-      /**
-       * Print all Labels in the authorized user's inbox. If no labels
-       * are found an appropriate message is printed.
-       */
-      async function listLabels() {
-        let response;
+      const emails = response.result.messages;
+      console.log(emails);
+      const threadsToReply = [];
+      for (const email of emails) {
+        const threadId = email.threadId;
+        console.log(threadId);
         try {
-          response = await gapi.client.gmail.users.labels.list({
-            'userId': 'me',
+          const threadResponse = await gapi.client.gmail.users.threads.get({
+            userId: 'me',
+            id: threadId,
+            format: 'full'
           });
+          console.log(threadResponse);
+          const timestamp = parseInt(threadResponse.messages[0].payload.headers[1].date);
+          console.log(timestamp);
+          
+      const dateString = "Sat, 08 Jul 2023 00:43:13 -0700 (PDT)";
+      const dateParts = dateString.split(", ")[1].split(" ");
+      const monthNames = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+      ];
+      const month = monthNames.indexOf(dateParts[1]) + 1;
+      const day = dateParts[0];
+      const year = dateParts[2];
+      const time = dateParts[3];
+      const formattedDate = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}T${time}Z`;
+
+      console.log(formattedDate);
+
+      console.log(timestamp);
+
+          if (formattedDate > cutoffTimestamp) {
+            threadsToReply.push(threadId);
+          }
         } catch (err) {
-          document.getElementById('content').innerText = err.message;
-          return;
+          console.error('Error retrieving thread:', err);
         }
-        const labels = response.result.labels;
-        if (!labels || labels.length == 0) {
-          document.getElementById('content').innerText = 'No labels found.';
-          return;
-        }
-        // Flatten to string to display
-        const output = labels.reduce(
-            (str, label) => `${str}${label.name}\n`,
-            'Labels:\n');
-        document.getElementById('content').innerText = output;
       }
-    </script>
-    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
-    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
-  </body>
+
+    for (const threadId of threadsToReply) {
+      await addLabelToThread(threadId, 'bot-unsent');
+    }
+
+
+    if (!emails || emails.length === 0) {
+      document.getElementById('content').innerText = 'No unread emails found.';
+      return;
+    }
+    // Display the list of unread emails
+    let output = 'Unread Emails:\n';
+    emails.forEach((email) => {
+      output += `- ${email.id}\n`;
+    });
+    document.getElementById('content').innerText = output;
+    }
+
+
+    async function getThreadMessages(threadId) {
+      const response = await gapi.client.gmail.users.threads.get({
+        userId: 'me',
+        id: threadId,
+        format: 'full',
+      });
+      return response.result.messages;
+    }
+
+    function checkPriorReply(messages) {
+      const senderEmail = 'yshahil0623@gmail.com';
+      for (let i = 1; i < messages.length; i++) {
+        const message = messages[i];
+        if (message.payload.headers.some((header) => header.name === 'From' && header.value === senderEmail)) {
+          return true; // Prior reply found
+        }
+      }
+      return false; // No prior reply found
+    }
+
+
+    async function addLabelToThread(threadId, labelName) {
+      const response = await gapi.client.gmail.users.threads.modify({
+        userId: 'me',
+        id: threadId,
+        addLabelIds: [getLabelIdByName(labelName)],
+      });
+      return response.result;
+    }
+
+    async function getLabelIdByName(labelName) {
+      const response = await gapi.client.gmail.users.labels.list({
+        userId: 'me',
+      });
+      const labels = response.result.labels;
+      for (const label of labels) {
+        if (label.name === labelName) {
+          return label.id;
+        }
+      }
+      // Label not found, create a new label
+      const createdLabel = await createLabel(labelName);
+      return createdLabel.id;
+    }
+
+    async function createLabel(labelName) {
+      const response = await gapi.client.gmail.users.labels.create({
+        userId: 'me',
+        resource: {
+          name: labelName,
+        },
+      });
+      return response.result;
+    }
+
+
+
+
+  </script>
+  <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+  <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+</body>
+
 </html>
