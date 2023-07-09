@@ -12,7 +12,7 @@
   <!--Add buttons to initiate auth sequence and sign out-->
   <button id="authorize_button" onclick="handleAuthClick()">Authorize</button>
   <button id="signout_button" onclick="handleSignoutClick()">Sign Out</button>
-  <button id="unread_button" onclick="listUnreadEmails()">Get Unread Emails</button>
+  <button id="unread_button" onclick="listUnreadEmails() , autoRespond()">Get Unread Emails</button>
 
   <pre id="content" style="white-space: pre-wrap;"></pre>
 
@@ -31,7 +31,7 @@
 
     // Authorization scopes required by the API; multiple scopes can be
     // included, separated by spaces.
-    const SCOPES = 'https://www.googleapis.com/auth/gmail.modify';
+    const SCOPES = 'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.compose';
 
     let tokenClient;
     let gapiInited = false;
@@ -216,20 +216,20 @@
           const formattedDate = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}T${time}Z`;
 
           const timestamp = new Date(formattedDate);
-console.log("cuttof: ",cutoffDate.getDate(),"format: " ,formattedDate,"times: ", timestamp);
+          // console.log("cuttof: ", cutoffDate.getDate(), "format: ", formattedDate, "times: ", timestamp);
 
-          if (timestamp.getDate() >= cutoffDate.getDate()) {          
+          if (timestamp.getDate() >= cutoffDate.getDate()) {
             threadsToReply.push(email.threadId);
-            console.log(threadsToReply);
+            // console.log(threadsToReply);
           }
         } catch (err) {
           console.error('Error retrieving thread:', err);
         }
         for (const threadId of threadsToReply) {
-        await addLabelToThread(threadId, "bot_unsent");
+          await addLabelToThread(threadId, "bot_unsent");
+        }
       }
-      }
-      
+
 
       if (!emails || emails.length === 0) {
         document.getElementById('content').innerText = 'No unread emails found.';
@@ -269,11 +269,78 @@ console.log("cuttof: ",cutoffDate.getDate(),"format: " ,formattedDate,"times: ",
       const response = await gapi.client.gmail.users.threads.modify({
         userId: 'me',
         id: threadId,
-        addLabelIds: [ "Label_2" ]  // Optional: If you want to remove any label, specify their IDs here
+        addLabelIds: ["Label_2"]  // Optional: If you want to remove any label, specify their IDs here
       });
-      console.log(response);
       return response.result;
     }
+
+    //---------------------------------------------------------------------------//
+    function encodeStringToBase64(str) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const base64 = btoa(String.fromCharCode.apply(null, data));
+  return base64;
+}
+    async function autoRespond() {
+      try {
+        const labelId = "Label_2";
+        const response = await gapi.client.gmail.users.messages.list({
+          userId: 'me',
+          q: 'is:unread',
+          labelIds: ["Label_2"],
+          maxResults: 2
+        });
+        console.log("auto",response);
+        const emails = response.result.messages;
+        console.log(emails);
+        for (const email of emails) {
+          const threadId = email.threadId;
+          const messages = await getThreadMessages(threadId);
+
+          if (!checkPriorReply(messages)) {
+            // Prior reply not found, send auto-response
+            console.log("hello");
+            const response = await gapi.client.gmail.users.messages.send({
+              userId: 'me',
+              resource: {
+                threadId: threadId,
+                message: {
+                  raw: encodeStringToBase64(
+                `From: "me"\n` +
+                `To: ${messages[0].payload.headers.find(header => header.name === 'From').value}\n` +
+                `Subject: Re: ${messages[0].payload.headers.find(header => header.name === 'Subject').value}\n` +
+                `\n` +
+                `Thank you`
+              )
+                }
+              }
+            });
+            
+            console.log(`Auto-response sent for thread ID: ${threadId}`);
+
+            // Move the email from Label_2 to bot_sent label
+            await modifyLabel(threadId, labelId);
+            console.log(`Email moved to bot_sent label for thread ID: ${threadId}`);
+          } else {
+            console.log(`Auto-response skipped for thread ID: ${threadId} (Prior reply found)`);
+          }
+        }
+      } catch (err) {
+        console.error('Error in autoRespond:', err);
+      }
+    }
+
+    async function modifyLabel(threadId, removeLabelId) {
+      await gapi.client.gmail.users.threads.modify({
+        userId: 'me',
+        id: threadId,
+        removeLabelIds: [removeLabelId],
+        addLabelIds: ["Label_8753876540372843220"]
+      });
+    }
+
+
+
 
 
     // async function getLabelIdByName(labelName) {
