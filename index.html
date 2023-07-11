@@ -7,7 +7,7 @@
 </head>
 
 <body>
-  <p>Gmail API Quickstart</p>
+  <p>Gmail AutoSender by Shahil</p>
 
   <!--Add buttons to initiate auth sequence and sign out-->
   <button id="authorize_button" onclick="handleAuthClick()">Authorize</button>
@@ -269,7 +269,7 @@
       const response = await gapi.client.gmail.users.threads.modify({
         userId: 'me',
         id: threadId,
-        addLabelIds: ["Label_2"]  // Optional: If you want to remove any label, specify their IDs here
+        addLabelIds: ["Label_8293613818241609292"]  // Optional: If you want to remove any label, specify their IDs here
       });
       return response.result;
     }
@@ -283,11 +283,11 @@
 }
     async function autoRespond() {
       try {
-        const labelId = "Label_2";
+        const labelId = "Label_8293613818241609292";
         const response = await gapi.client.gmail.users.messages.list({
           userId: 'me',
           q: 'is:unread',
-          labelIds: ["Label_2"],
+          labelIds: ["Label_8293613818241609292"],
           maxResults: 2
         });
         console.log("auto",response);
@@ -296,29 +296,42 @@
         for (const email of emails) {
           const threadId = email.threadId;
           const messages = await getThreadMessages(threadId);
-
+console.log(messages[0].payload.headers.find(header => header.name === 'From').value);
           if (!checkPriorReply(messages)) {
             // Prior reply not found, send auto-response
             console.log("hello");
-            const response = await gapi.client.gmail.users.messages.send({
-              userId: 'me',
-              resource: {
-                threadId: threadId,
-                message: {
-                  raw: encodeStringToBase64(
-                `From: "me"\n` +
-                `To: ${messages[0].payload.headers.find(header => header.name === 'From').value}\n` +
-                `Subject: Re: ${messages[0].payload.headers.find(header => header.name === 'Subject').value}\n` +
-                `\n` +
-                `Thank you`
-              )
-                }
-              }
-            });
+  
+            const from = "me";
+  const to = messages[0].payload.headers.find(header => header.name === 'From').value;
+  const subject = `Re: ${messages[0].payload.headers.find(header => header.name === 'Subject').value}`;
+  const body = "Thank you";
+  console.log(subject);
+  const messageParts = [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    "",
+    body
+  ];
+  
+  const rawMessage = messageParts.join("\n");
+  
+  const encodedMessage = btoa(rawMessage);
+  
+  const response = await gapi.client.gmail.users.messages.send({
+    userId: 'me',
+    resource: {
+      threadId: threadId,
+      message: {
+        raw: encodedMessage
+      }
+    }
+  });
+            console.log(response);
             
             console.log(`Auto-response sent for thread ID: ${threadId}`);
 
-            // Move the email from Label_2 to bot_sent label
+            // Move the email from Label_8293613818241609292 to bot_sent label
             await modifyLabel(threadId, labelId);
             console.log(`Email moved to bot_sent label for thread ID: ${threadId}`);
           } else {
@@ -326,6 +339,7 @@
           }
         }
       } catch (err) {
+        console.log(err);
         console.error('Error in autoRespond:', err);
       }
     }
